@@ -64,6 +64,9 @@ VARIABLE nextIndex
 VARIABLE matchIndex
 leaderVars == <<nextIndex, matchIndex>>
 
+\* an Un-ordered cache for each follower to receive requests from switch!
+VARIABLE followerUnorderedCache
+
 \* All variables; used for stuttering (asserting state hasn't changed).
 vars == <<messages, serverVars, candidateVars, leaderVars, logVars, instrumentationVars>>
 
