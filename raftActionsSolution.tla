@@ -7,7 +7,7 @@ EXTENDS raftInit
 
 \* Modified to allow Restarts only for Leaders
 \* Server i restarts from stable storage.
-\* It loses everything but its currentTerm, votedFor, and log.
+\* It loses everything but its currentTerm, votedFor, and log. [P1] Also not UnorderedCache for now!
 \* Also persists messages and instrumentation vars elections, maxc, leaderCount, entryCommitStats
 Restart(i) ==
     /\ state[i] = Leader \* limit restart to leaders todo mc
@@ -18,10 +18,11 @@ Restart(i) ==
     /\ nextIndex'      = [nextIndex EXCEPT ![i] = [j \in Server |-> 1]]
     /\ matchIndex'     = [matchIndex EXCEPT ![i] = [j \in Server |-> 0]]
     /\ commitIndex'    = [commitIndex EXCEPT ![i] = 0]
-    /\ UNCHANGED <<messages, currentTerm, votedFor, log, instrumentationVars>>
+    /\ UNCHANGED <<messages, currentTerm, votedFor, UnorderedCache, log, instrumentationVars>>
 
 \* Modified to restrict Timeout to just Followers
 \* Server i times out and starts a new election. Follower -> Candidate
+\* [P1] No change for server cache since it is about election!
 Timeout(i) == /\ state[i] \in {Follower} \*, Candidate
               /\ currentTerm[i] < MaxTerm
               /\ state' = [state EXCEPT ![i] = Candidate]
@@ -32,10 +33,11 @@ Timeout(i) == /\ state[i] \in {Follower} \*, Candidate
               /\ votesResponded' = [votesResponded EXCEPT ![i] = {}]
               /\ votesGranted'   = [votesGranted EXCEPT ![i] = {}]
               /\ voterLog'       = [voterLog EXCEPT ![i] = [j \in {} |-> <<>>]]
-              /\ UNCHANGED <<messages, leaderVars, logVars, instrumentationVars>>
+              /\ UNCHANGED <<messages, leaderVars, logVars, instrumentationVars, UnorderedCache>>
 
 \* Modified to restrict Leader transitions, bounded by MaxBecomeLeader
 \* Candidate i transitions to leader. Candidate -> Leader
+\* [P1] No change for server cache!
 BecomeLeader(i) ==
     /\ state[i] = Candidate
     /\ votesGranted[i] \in Quorum
@@ -46,10 +48,11 @@ BecomeLeader(i) ==
     /\ matchIndex' = [matchIndex EXCEPT ![i] =
                          [j \in Server |-> 0]]
     /\ leaderCount' = [leaderCount EXCEPT ![i] = leaderCount[i] + 1]
-    /\ UNCHANGED <<messages, currentTerm, votedFor, candidateVars, logVars, maxc, entryCommitStats>>
+    /\ UNCHANGED <<messages, currentTerm, votedFor, UnorderedCache, candidateVars, logVars, maxc, entryCommitStats>>
 
 \* Modified up to MaxTerm; Back To Follower
 \* Any RPC with a newer term causes the recipient to advance its term first.
+\* [P1] No change for server cache! still about election i guess.
 UpdateTerm(i, j, m) ==
     /\ m.mterm > currentTerm[i]
     /\ m.mterm < MaxTerm
@@ -57,7 +60,7 @@ UpdateTerm(i, j, m) ==
     /\ state'          = [state       EXCEPT ![i] = Follower]
     /\ votedFor'       = [votedFor    EXCEPT ![i] = Nil]
        \* messages is unchanged so m can be processed further.
-    /\ UNCHANGED <<messages, candidateVars, leaderVars, logVars, instrumentationVars>>
+    /\ UNCHANGED <<messages, candidateVars, leaderVars, logVars, instrumentationVars, UnorderedCache>>
 
 \***************************** REQUEST VOTE **********************************************
 \* Message handlers
@@ -77,6 +80,7 @@ RequestVote(i, j) ==
 
 \* Server i receives a RequestVote request from server j with
 \* m.mterm <= currentTerm[i].
+\* [P1] No change for server cache!
 HandleRequestVoteRequest(i, j, m) ==
     LET logOk == \/ m.mlastLogTerm > LastTerm(log[i])
                  \/ /\ m.mlastLogTerm = LastTerm(log[i])
@@ -96,10 +100,11 @@ HandleRequestVoteRequest(i, j, m) ==
                  msource      |-> i,
                  mdest        |-> j],
                  m)
-       /\ UNCHANGED <<state, currentTerm, candidateVars, leaderVars, logVars, instrumentationVars>>
+       /\ UNCHANGED <<state, currentTerm, UnorderedCache, candidateVars, leaderVars, logVars, instrumentationVars>>
 
 \* Server i receives a RequestVote response from server j with
 \* m.mterm = currentTerm[i].
+\* [P1] No change for server cache!
 HandleRequestVoteResponse(i, j, m) ==
     \* This tallies votes even when the current state is not Candidate, but
     \* they won't be looked at, so it doesn't matter.
@@ -117,6 +122,7 @@ HandleRequestVoteResponse(i, j, m) ==
     /\ UNCHANGED <<serverVars, votedFor, leaderVars, logVars, instrumentationVars>>
 
 \* Responses with stale terms are ignored.
+\* [P1] No change for server cache!
 DropStaleResponse(i, j, m) ==
     /\ m.mterm < currentTerm[i]
     /\ Discard(m)
@@ -142,6 +148,8 @@ ClientRequest(i, v) ==
               THEN entryCommitStats @@ (newEntryKey :> [ sentCount |-> 0, ackCount |-> 0, committed |-> FALSE ])
               ELSE entryCommitStats
     /\ UNCHANGED <<messages, serverVars, candidateVars, leaderVars, commitIndex, leaderCount>>
+
+\*TODO: Client --> Switch --> Leader & Followers
 
 \* Modified. Leader i sends j an AppendEntries request containing exactly 1 entry. It was up to 1 entry.
 \* While implementations may want to send more than 1 at a time, this spec uses

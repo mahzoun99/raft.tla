@@ -6,6 +6,7 @@ InitHistoryVars == voterLog  = [i \in Server |-> [j \in {} |-> <<>>]]
 InitServerVars == /\ currentTerm = [i \in Server |-> 1]
                   /\ state       = [i \in Server |-> Follower]
                   /\ votedFor    = [i \in Server |-> Nil]
+                  /\ UnorderedCache = [i \in Server |-> {}]
 InitCandidateVars == /\ votesResponded = [i \in Server |-> {}]
                      /\ votesGranted   = [i \in Server |-> {}]
 \* The values nextIndex[i][i] and matchIndex[i][i] are never read, since the
@@ -24,7 +25,6 @@ Init == /\ messages = [m \in {} |-> 0]
         /\ maxc = 0
         /\ leaderCount = [i \in Server |-> 0]
         /\ entryCommitStats = [ idx_term \in {} |-> [ sentCount |-> 0, ackCount |-> 0, committed |-> FALSE ] ] \* Initialize new variable
-        /\ followerUnorderedCache = [i \in Follower |-> {}]
 
 \* MyInit remains unchanged for the core Raft state, entryCommitStats is handled in Init.
 MyInit ==

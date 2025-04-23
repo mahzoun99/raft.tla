@@ -7,13 +7,10 @@ EXTENDS raftConstants
 \* A bag of records representing requests and responses sent from one server
 \* to another. This is a function mapping Message to Nat.
 VARIABLE messages
-
 \* Counter for how many times each server has become leader
 VARIABLE leaderCount
-
 \* maximum client requests so far
 VARIABLE maxc
-
 \* variable for tracking entry commit message counts
 \* Maps <<logIndex, logTerm>> to a record tracking message counts.
 \* [ sentCount |-> Nat,   \* AppendEntriesRequests sent for this entry
@@ -32,7 +29,10 @@ VARIABLE state
 \* The candidate the server voted for in its current term, or
 \* Nil if it hasn't voted for any.
 VARIABLE votedFor
-serverVars == <<currentTerm, state, votedFor>>
+\* [P1] an Un-ordered cache for each follower to receive requests from switch!
+VARIABLE UnorderedCache
+
+serverVars == <<currentTerm, state, votedFor, UnorderedCache>>
 
 \* A Sequence of log entries. The index into this sequence is the index of the
 \* log entry. Unfortunately, the Sequence module defines Head(s) as the entry
@@ -40,6 +40,7 @@ serverVars == <<currentTerm, state, votedFor>>
 VARIABLE log
 \* The index of the latest entry in the log the state machine may apply.
 VARIABLE commitIndex
+
 logVars == <<log, commitIndex>>
 
 \* The following variables are used only on candidates:
@@ -54,6 +55,7 @@ VARIABLE votesGranted
 \* Function from each server that voted for this candidate in its currentTerm
 \* to that voter's log.
 VARIABLE voterLog
+
 candidateVars == <<votesResponded, votesGranted, voterLog>>
 
 \* The following variables are used only on leaders:
@@ -62,10 +64,8 @@ VARIABLE nextIndex
 \* The latest entry that each follower has acknowledged is the same as the
 \* leader's. This is used to calculate commitIndex on the leader.
 VARIABLE matchIndex
-leaderVars == <<nextIndex, matchIndex>>
 
-\* an Un-ordered cache for each follower to receive requests from switch!
-VARIABLE followerUnorderedCache
+leaderVars == <<nextIndex, matchIndex>>
 
 \* All variables; used for stuttering (asserting state hasn't changed).
 vars == <<messages, serverVars, candidateVars, leaderVars, logVars, instrumentationVars>>
