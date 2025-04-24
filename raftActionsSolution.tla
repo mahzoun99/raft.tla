@@ -130,8 +130,28 @@ DropStaleResponse(i, j, m) ==
 
 \***************************** AppendEntries **********************************************
 
+\* [P1] Switch receives a client request and broadcast it to all servers! TODO: update server cache!
+ClientToSwitch(v) ==
+    /\ maxc < MaxClientRequests 
+\*    /\ LET entryTerm == currentTerm[i]
+\*           entry == [term |-> entryTerm, value |-> v]
+\*           entryExists == \E j \in DOMAIN log[i] : log[i][j].value = v /\ log[i][j].term = entryTerm
+\*           newLog == IF entryExists THEN log[i] ELSE Append(log[i], entry)
+\*           newEntryIndex == Len(log[i]) + 1
+\*           newEntryKey == <<newEntryIndex, entryTerm>>
+\*       IN
+\*        /\ log' = [log EXCEPT ![i] = newLog]
+\*        /\ maxc' = IF entryExists THEN maxc ELSE maxc + 1
+\*        /\ entryCommitStats' =
+\*              IF ~entryExists /\ newEntryIndex > 0 \* Only add stats for truly new entries
+\*              THEN entryCommitStats @@ (newEntryKey :> [ sentCount |-> 0, ackCount |-> 0, committed |-> FALSE ])
+\*              ELSE entryCommitStats
+\*    /\ UNCHANGED <<messages, serverVars, candidateVars, leaderVars, commitIndex, leaderCount>>
+
+
 \* Modified. Leader i receives a client request to add v to the log. up to MaxClientRequests.
-ClientRequest(i, v) ==
+\* [P1] Leader should rcv from switch and then do its job without payload! TODO: remove payload from entry!
+SwitchToLeader(i, v) ==
     /\ state[i] = Leader
     /\ maxc < MaxClientRequests 
     /\ LET entryTerm == currentTerm[i]
@@ -148,8 +168,6 @@ ClientRequest(i, v) ==
               THEN entryCommitStats @@ (newEntryKey :> [ sentCount |-> 0, ackCount |-> 0, committed |-> FALSE ])
               ELSE entryCommitStats
     /\ UNCHANGED <<messages, serverVars, candidateVars, leaderVars, commitIndex, leaderCount>>
-
-\*TODO: Client --> Switch --> Leader & Followers
 
 \* Modified. Leader i sends j an AppendEntries request containing exactly 1 entry. It was up to 1 entry.
 \* While implementations may want to send more than 1 at a time, this spec uses
@@ -194,6 +212,7 @@ AppendEntries(i, j) ==
 \* m.mterm <= currentTerm[i]. This just handles m.entries of length 0 or 1, but
 \* implementations could safely accept more by treating them the same as
 \* multiple independent requests of 1 entry.
+\* [P1] TODO: get the payload from the cache!
 HandleAppendEntriesRequest(i, j, m) ==
     LET logOk == \/ m.mprevLogIndex = 0
                  \/ /\ m.mprevLogIndex > 0
