@@ -21,3 +21,11 @@ What do I need next?
 - Receiving request from Switch to Followers.
 - Change the Leader broadcast to followers! (Remove the payload)
 - Change the Rcv leaders req (get the payload from the cache)
+
+
+*I got Stuck on implementing the actions in this approach! I think this one was a better practice. However, it is harder to implement*
+
+I will change the code to consider Switch as another type of server!\
+In Variables, we need an index for the switch.\
+I guess if someday we want to expand the number of switches, we can make this variable a list!
+
