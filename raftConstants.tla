@@ -8,11 +8,8 @@ CONSTANTS Server
 \* The set of client requests that can go into the log
 CONSTANTS Value
 
-\* Server states.
-CONSTANTS Follower, Candidate, Leader
-
-\* [P1] Adding Switch
-CONSTANT Switch
+\* Server states. [P1] Add Switch
+CONSTANTS Follower, Candidate, Leader, Switch
 
 \* A reserved value.
 CONSTANTS Nil

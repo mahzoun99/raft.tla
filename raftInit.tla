@@ -3,6 +3,8 @@
 EXTENDS raftHelpers
 
 InitHistoryVars == voterLog  = [i \in Server |-> [j \in {} |-> <<>>]]
+\* [P1] UnorderedCache Initialized for all servers to empty set.
+\* [P1] !!! State should be fixed for switch!!! + indexVars
 InitServerVars == /\ currentTerm = [i \in Server |-> 1]
                   /\ state       = [i \in Server |-> Follower]
                   /\ votedFor    = [i \in Server |-> Nil]
@@ -27,11 +29,13 @@ Init == /\ messages = [m \in {} |-> 0]
         /\ entryCommitStats = [ idx_term \in {} |-> [ sentCount |-> 0, ackCount |-> 0, committed |-> FALSE ] ] \* Initialize new variable
 
 \* MyInit remains unchanged for the core Raft state, entryCommitStats is handled in Init.
+\* [P1] Initialize Switch as a server!
 MyInit ==
-    LET ServerIds == CHOOSE ids \in [1..3 -> Server] : TRUE
+    LET ServerIds == CHOOSE ids \in [0..3 -> Server] : TRUE
         r1 == ServerIds[1]
         r2 == ServerIds[2]
         r3 == ServerIds[3]
+        r0 == ServerIds[0]
     IN
     /\ commitIndex = [s \in Server |-> 0]
     /\ currentTerm = [s \in Server |-> 2]
@@ -41,11 +45,11 @@ MyInit ==
     /\ maxc = 0
     /\ messages = [m \in {} |-> 0]  \* Start with empty messages
     /\ nextIndex = [s \in Server |-> [t \in Server |-> 1]]
-    /\ state = [s \in Server |-> IF s = r2 THEN Leader ELSE Follower]
-    /\ votedFor = [s \in Server |-> IF s = r2 THEN Nil ELSE r2]
-    /\ voterLog = [s \in Server |-> IF s = r2 THEN (r1 :> <<>> @@ r3 :> <<>>) ELSE <<>>]
-    /\ votesGranted = [s \in Server |-> IF s = r2 THEN {r1, r3} ELSE {}]
-    /\ votesResponded = [s \in Server |-> IF s = r2 THEN {r1, r3} ELSE {}]
+    /\ state = [s \in Server |-> IF s = r0 THEN Switch ELSE IF s = r2 THEN Leader ELSE Follower]
+    /\ votedFor = [s \in Server |-> IF (s = r2 \/ s = r0) THEN Nil ELSE r2]
+    /\ voterLog = [s \in Server |-> IF s = r0 THEN Nil ELSE IF s = r2 THEN (r1 :> <<>> @@ r3 :> <<>>) ELSE <<>>]
+    /\ votesGranted = [s \in Server |-> IF s = r0 THEN Nil ELSE IF s = r2 THEN {r1, r3} ELSE {}]
+    /\ votesResponded = [s \in Server |-> IF s = r0 THEN Nil ELSE IF s = r2 THEN {r1, r3} ELSE {}]
     /\ entryCommitStats = [ idx_term \in {} |-> [ sentCount |-> 0, ackCount |-> 0, committed |-> FALSE ] ] \* Initialize here too
 
 \* to be used directly in model Init the value

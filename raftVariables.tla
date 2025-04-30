@@ -67,8 +67,14 @@ VARIABLE matchIndex
 
 leaderVars == <<nextIndex, matchIndex>>
 
+\* [P1] The following variables are used only on switches:
+VARIABLE switchIndex
+VARIABLE leaderIndex
+
+indexVars == <<switchIndex, leaderIndex>>
+
 \* All variables; used for stuttering (asserting state hasn't changed).
-vars == <<messages, serverVars, candidateVars, leaderVars, logVars, instrumentationVars>>
+vars == <<messages, serverVars, candidateVars, leaderVars, logVars, instrumentationVars, indexVars>>
 
 =============================================================================
 \* Created by Ovidiu-Cristian Marcu
