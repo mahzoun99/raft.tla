@@ -33,7 +33,7 @@ Next ==
 \*           \/ \E i \in Server : Restart(i)
            \/ \E i,j \in Server : i /= j /\ RequestVote(i, j)
            \/ \E i \in Server : BecomeLeader(i)
-           \/ \E i \in Server, v \in Value : state[i] = Leader /\ SwitchToLeader(i, v)
+           \/ \E i \in Server, v \in Value : state[i] = Leader /\ ClientRequest(i, v)
            \/ \E i \in Server : AdvanceCommitIndex(i)
            \/ \E i,j \in Server : i /= j /\ AppendEntries(i, j)
            \/ \E m \in {msg \in ValidMessage(messages) : \* to visualize possible messages
@@ -48,7 +48,7 @@ MyNext ==
 \*           \/ \E i \in Server : Restart(i)
 \*           \/ \E i,j \in Server : i /= j /\ RequestVote(i, j)
 \*           \/ \E i \in Server : BecomeLeader(i)
-           \/ \E i \in Server, v \in Value : state[i] = Leader /\ SwitchToLeader(i, v)
+           \/ \E i \in Server, v \in Value : state[i] = Leader /\ ClientRequest(i, v)
            \/ \E i \in Server : AdvanceCommitIndex(i)
            \/ \E i,j \in Server : i /= j /\ AppendEntries(i, j)
            \/ \E m \in {msg \in ValidMessage(messages) : \* to visualize possible messages
@@ -58,6 +58,20 @@ MyNext ==
 \*           \/ \E m \in {msg \in ValidMessage(messages) : 
 \*                    msg.mtype \in {RequestVoteRequest}} : DropMessage(m)
 
+
+MySwitchNext == 
+    LET Servers == Server \ {switchIndex}
+    IN
+       \/ \E i \in Servers, v \in Value : 
+          state[i] = Leader /\ SwitchClientRequest(switchIndex, i, v)
+       \/ \E i \in Servers, v \in DOMAIN switchBuffer : 
+          SwitchClientRequestReplicate(switchIndex, i, v)
+       \/ \E i \in Servers, v \in DOMAIN switchBuffer : 
+          state[i] = Leader /\ LeaderIngestHovercRaftRequest(i, v)
+       \/ \E i \in Servers : AdvanceCommitIndex(i)
+       \/ \E i,j \in Servers : i /= j /\ AppendEntries(i, j)
+       \/ \E m \in {msg \in ValidMessage(messages) : msg.mtype \in 
+          {AppendEntriesRequest, AppendEntriesResponse}} : Receive(m)
 
 \* The specification must start with the initial state and transition according
 \* to Next.

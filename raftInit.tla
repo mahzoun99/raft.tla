@@ -51,6 +51,7 @@ MyInit ==
     /\ votesGranted = [s \in Server |-> IF s = r0 THEN Nil ELSE IF s = r2 THEN {r1, r3} ELSE {}]
     /\ votesResponded = [s \in Server |-> IF s = r0 THEN Nil ELSE IF s = r2 THEN {r1, r3} ELSE {}]
     /\ entryCommitStats = [ idx_term \in {} |-> [ sentCount |-> 0, ackCount |-> 0, committed |-> FALSE ] ] \* Initialize here too
+    /\ switchIndex = "r0"
 
 \* to be used directly in model Init the value
 \*MyInit2 ==

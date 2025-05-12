@@ -18,11 +18,10 @@ Restart(i) ==
     /\ nextIndex'      = [nextIndex EXCEPT ![i] = [j \in Server |-> 1]]
     /\ matchIndex'     = [matchIndex EXCEPT ![i] = [j \in Server |-> 0]]
     /\ commitIndex'    = [commitIndex EXCEPT ![i] = 0]
-    /\ UNCHANGED <<messages, currentTerm, votedFor, UnorderedCache, log, instrumentationVars>>
+    /\ UNCHANGED <<messages, currentTerm, votedFor, UnorderedCache, log, instrumentationVars, hovercraftVars>>
 
 \* Modified to restrict Timeout to just Followers
 \* Server i times out and starts a new election. Follower -> Candidate
-\* [P1] No change for server cache since it is about election!
 Timeout(i) == /\ state[i] \in {Follower} \*, Candidate
               /\ currentTerm[i] < MaxTerm
               /\ state' = [state EXCEPT ![i] = Candidate]
@@ -33,11 +32,10 @@ Timeout(i) == /\ state[i] \in {Follower} \*, Candidate
               /\ votesResponded' = [votesResponded EXCEPT ![i] = {}]
               /\ votesGranted'   = [votesGranted EXCEPT ![i] = {}]
               /\ voterLog'       = [voterLog EXCEPT ![i] = [j \in {} |-> <<>>]]
-              /\ UNCHANGED <<messages, leaderVars, logVars, instrumentationVars, UnorderedCache>>
+              /\ UNCHANGED <<messages, leaderVars, logVars, instrumentationVars, UnorderedCache, hovercraftVars>>
 
 \* Modified to restrict Leader transitions, bounded by MaxBecomeLeader
 \* Candidate i transitions to leader. Candidate -> Leader
-\* [P1] No change for server cache!
 BecomeLeader(i) ==
     /\ state[i] = Candidate
     /\ votesGranted[i] \in Quorum
@@ -48,19 +46,20 @@ BecomeLeader(i) ==
     /\ matchIndex' = [matchIndex EXCEPT ![i] =
                          [j \in Server |-> 0]]
     /\ leaderCount' = [leaderCount EXCEPT ![i] = leaderCount[i] + 1]
-    /\ UNCHANGED <<messages, currentTerm, votedFor, UnorderedCache, candidateVars, logVars, maxc, entryCommitStats>>
+    /\ UNCHANGED <<messages, currentTerm, votedFor, UnorderedCache, candidateVars, logVars, maxc, entryCommitStats, hovercraftVars>>
 
 \* Modified up to MaxTerm; Back To Follower
 \* Any RPC with a newer term causes the recipient to advance its term first.
-\* [P1] No change for server cache! still about election i guess.
+\* [P1] 
 UpdateTerm(i, j, m) ==
     /\ m.mterm > currentTerm[i]
     /\ m.mterm < MaxTerm
+    \* TODO: /\ /= switchIndex
     /\ currentTerm'    = [currentTerm EXCEPT ![i] = m.mterm]
     /\ state'          = [state       EXCEPT ![i] = Follower]
     /\ votedFor'       = [votedFor    EXCEPT ![i] = Nil]
        \* messages is unchanged so m can be processed further.
-    /\ UNCHANGED <<messages, candidateVars, leaderVars, logVars, instrumentationVars, UnorderedCache>>
+    /\ UNCHANGED <<messages, candidateVars, leaderVars, logVars, instrumentationVars, UnorderedCache, hovercraftVars>>
 
 \***************************** REQUEST VOTE **********************************************
 \* Message handlers
@@ -76,11 +75,10 @@ RequestVote(i, j) ==
              mlastLogIndex |-> Len(log[i]),
              msource       |-> i,
              mdest         |-> j])
-    /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars, instrumentationVars>>
+    /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars, instrumentationVars, hovercraftVars>>
 
 \* Server i receives a RequestVote request from server j with
 \* m.mterm <= currentTerm[i].
-\* [P1] No change for server cache!
 HandleRequestVoteRequest(i, j, m) ==
     LET logOk == \/ m.mlastLogTerm > LastTerm(log[i])
                  \/ /\ m.mlastLogTerm = LastTerm(log[i])
@@ -100,11 +98,10 @@ HandleRequestVoteRequest(i, j, m) ==
                  msource      |-> i,
                  mdest        |-> j],
                  m)
-       /\ UNCHANGED <<state, currentTerm, UnorderedCache, candidateVars, leaderVars, logVars, instrumentationVars>>
+       /\ UNCHANGED <<state, currentTerm, UnorderedCache, candidateVars, leaderVars, logVars, instrumentationVars, hovercraftVars>>
 
 \* Server i receives a RequestVote response from server j with
 \* m.mterm = currentTerm[i].
-\* [P1] No change for server cache!
 HandleRequestVoteResponse(i, j, m) ==
     \* This tallies votes even when the current state is not Candidate, but
     \* they won't be looked at, so it doesn't matter.
@@ -119,39 +116,36 @@ HandleRequestVoteResponse(i, j, m) ==
        \/ /\ ~m.mvoteGranted
           /\ UNCHANGED <<votesGranted, voterLog>>
     /\ Discard(m)
-    /\ UNCHANGED <<serverVars, votedFor, leaderVars, logVars, instrumentationVars>>
+    /\ UNCHANGED <<serverVars, votedFor, leaderVars, logVars, instrumentationVars, hovercraftVars>>
 
 \* Responses with stale terms are ignored.
-\* [P1] No change for server cache!
 DropStaleResponse(i, j, m) ==
     /\ m.mterm < currentTerm[i]
     /\ Discard(m)
-    /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars, instrumentationVars>>
+    /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars, instrumentationVars, hovercraftVars>>
 
 \***************************** AppendEntries **********************************************
 
-\* [P1] Switch receives a client request and broadcast it to all servers! TODO: update server cache!
-ClientToSwitch(v) ==
-    /\ maxc < MaxClientRequests 
-\*    /\ LET entryTerm == currentTerm[i]
-\*           entry == [term |-> entryTerm, value |-> v]
-\*           entryExists == \E j \in DOMAIN log[i] : log[i][j].value = v /\ log[i][j].term = entryTerm
-\*           newLog == IF entryExists THEN log[i] ELSE Append(log[i], entry)
-\*           newEntryIndex == Len(log[i]) + 1
-\*           newEntryKey == <<newEntryIndex, entryTerm>>
-\*       IN
-\*        /\ log' = [log EXCEPT ![i] = newLog]
-\*        /\ maxc' = IF entryExists THEN maxc ELSE maxc + 1
-\*        /\ entryCommitStats' =
-\*              IF ~entryExists /\ newEntryIndex > 0 \* Only add stats for truly new entries
-\*              THEN entryCommitStats @@ (newEntryKey :> [ sentCount |-> 0, ackCount |-> 0, committed |-> FALSE ])
-\*              ELSE entryCommitStats
-\*    /\ UNCHANGED <<messages, serverVars, candidateVars, leaderVars, commitIndex, leaderCount>>
+\* [P1]:
+\* Switch receives a client request and broadcast it to all servers! TODO: update server cache!
+\* Similar to append entries!
+\* HandleAppendEntriesRequest to update cache?!
+
+SwitchClientRequest(sIdx, i, v) == 
+    /\ sIdx = switchIndex
+    /\ UNCHANGED <<vars>>
+
+SwitchClientRequestReplicate(sIdx, i, v) == 
+    /\ sIdx = switchIndex
+    /\ UNCHANGED <<vars>>
+
+LeaderIngestHovercRaftRequest(i, v) == 
+    /\ UNCHANGED <<vars>>
 
 
 \* Modified. Leader i receives a client request to add v to the log. up to MaxClientRequests.
-\* [P1] Leader should rcv from switch and then do its job without payload! TODO: remove payload from entry!
-SwitchToLeader(i, v) ==
+\* [P1] write your own! keep this as it is!
+ClientRequest(i, v) ==
     /\ state[i] = Leader
     /\ maxc < MaxClientRequests 
     /\ LET entryTerm == currentTerm[i]
@@ -167,7 +161,7 @@ SwitchToLeader(i, v) ==
               IF ~entryExists /\ newEntryIndex > 0 \* Only add stats for truly new entries
               THEN entryCommitStats @@ (newEntryKey :> [ sentCount |-> 0, ackCount |-> 0, committed |-> FALSE ])
               ELSE entryCommitStats
-    /\ UNCHANGED <<messages, serverVars, candidateVars, leaderVars, commitIndex, leaderCount>>
+    /\ UNCHANGED <<messages, serverVars, candidateVars, leaderVars, commitIndex, leaderCount, hovercraftVars>>
 
 \* Modified. Leader i sends j an AppendEntries request containing exactly 1 entry. It was up to 1 entry.
 \* While implementations may want to send more than 1 at a time, this spec uses
@@ -180,6 +174,7 @@ AppendEntries(i, j) ==
     /\ matchIndex[i][j] < nextIndex[i][j] \* Only send if follower hasn't already acknowledged this index
     /\ LET entryIndex == nextIndex[i][j]
            entry == log[i][entryIndex]
+           \* [P1] entryMetaData!
            entries == << entry >>
            entryKey == <<entryIndex, entry.term>>
            prevLogIndex == entryIndex - 1
@@ -206,24 +201,35 @@ AppendEntries(i, j) ==
             IF entryKey \in DOMAIN entryCommitStats /\ ~entryCommitStats[entryKey].committed
             THEN [entryCommitStats EXCEPT ![entryKey].sentCount = @ + 1]
             ELSE entryCommitStats         
-    /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars, maxc, leaderCount>>
+    /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars, maxc, leaderCount, hovercraftVars>>
 
 \* Server i receives an AppendEntries request from server j with
 \* m.mterm <= currentTerm[i]. This just handles m.entries of length 0 or 1, but
 \* implementations could safely accept more by treating them the same as
 \* multiple independent requests of 1 entry.
-\* [P1] TODO: get the payload from the cache!
+\* [P1] TODO: rejectMismatchCondition + 
 HandleAppendEntriesRequest(i, j, m) ==
     LET logOk == \/ m.mprevLogIndex = 0
                  \/ /\ m.mprevLogIndex > 0
                     /\ m.mprevLogIndex <= Len(log[i])
                     /\ m.mprevLogTerm = log[i][m.mprevLogIndex].term
+        rejectMismatchCondition == 
+            /\ m.mentries /= <<>>
+            /\ LET entry == m.mentries[1]
+                   v == entry.value
+                   msgTerm == entry.term
+               IN  \lnot ( /\ v \in unorderedRequests[i]
+                           /\ v \in DOMAIN switchBuffer
+                           /\ switchBuffer[v].term = msgTerm )
     IN /\ m.mterm <= currentTerm[i]
        /\ \/ /\ \* reject request
                 \/ m.mterm < currentTerm[i]
                 \/ /\ m.mterm = currentTerm[i]
                    /\ state[i] = Follower
                    /\ \lnot logOk
+                \/ /\ m.mterm = currentTerm[i]
+                   /\ state[i] = Follower
+                   /\ rejectMismatchCondition
              /\ Reply([mtype           |-> AppendEntriesResponse,
                        mterm           |-> currentTerm[i],
                        msuccess        |-> FALSE,
@@ -231,12 +237,12 @@ HandleAppendEntriesRequest(i, j, m) ==
                        msource         |-> i,
                        mdest           |-> j],
                        m)
-             /\ UNCHANGED <<serverVars, logVars>>
+             /\ UNCHANGED <<serverVars, logVars, unorderedRequests>>
           \/ \* return to follower state
              /\ m.mterm = currentTerm[i]
              /\ state[i] = Candidate
              /\ state' = [state EXCEPT ![i] = Follower]
-             /\ UNCHANGED <<currentTerm, votedFor, logVars, messages>>
+             /\ UNCHANGED <<currentTerm, votedFor, logVars, messages, unorderedRequests>>
           \/ \* accept request
              /\ m.mterm = currentTerm[i]
              /\ state[i] = Follower
@@ -265,7 +271,7 @@ HandleAppendEntriesRequest(i, j, m) ==
                                  msource         |-> i,
                                  mdest           |-> j],
                                  m)
-                       /\ UNCHANGED <<serverVars, log>>
+                       /\ UNCHANGED <<serverVars, log, unorderedRequests>>
                    \/ \* conflict: remove 1 entry (simplified from original spec - assumes entry length 1)
                       \* since we do not send empty entries, we have to provide a larger set of values to ensure some progress
                        /\ m.mentries /= << >>
@@ -276,14 +282,24 @@ HandleAppendEntriesRequest(i, j, m) ==
 \*                       /\ LET new == [index2 \in 1..(Len(log[i]) - 1) |->
 \*                                          log[i][index2]]
 \*                          IN log' = [log EXCEPT ![i] = new]
-                       /\ UNCHANGED <<serverVars, commitIndex, messages>>
+                       /\ UNCHANGED <<serverVars, commitIndex, messages, unorderedRequests>>
                    \/ \* no conflict: append entry
                        /\ m.mentries /= << >>
                        /\ Len(log[i]) = m.mprevLogIndex
-                       /\ log' = [log EXCEPT ![i] =
+                       /\ \lnot rejectMismatchCondition
+                       /\ LET \* For unordered requests
+                          entryMetadata == m.mentries[1]
+                          fullEntryFromCache == switchBuffer[entryMetadata.value]
+                          entryForLocalLog == [term |-> entryMetadata.term,
+                                               value |-> entryMetadata.value,
+                                               payload |-> fullEntryFromCache.payload]
+                          IN
+                            /\ log' = [log EXCEPT ![i] =
                                       Append(log[i], m.mentries[1])]
+                            /\ unorderedRequests'= [unorderedRequests EXCEPT ![i] = @ \ {entryMetadata.value}]
                        /\ UNCHANGED <<serverVars, commitIndex, messages>>
-       /\ UNCHANGED <<candidateVars, leaderVars, instrumentationVars>> \* entryCommitStats unchanged on followers
+       /\ UNCHANGED <<candidateVars, leaderVars, instrumentationVars, \* entryCommitStats unchanged on followers
+                    switchBuffer, switchIndex, switchSentRecord>> 
 
 \* Server i receives an AppendEntries response from server j with
 \* m.mterm = currentTerm[i].
@@ -310,7 +326,7 @@ HandleAppendEntriesResponse(i, j, m) ==
                                Max({nextIndex[i][j] - 1, 1})]
           /\ UNCHANGED <<matchIndex, entryCommitStats>>
     /\ Discard(m)
-    /\ UNCHANGED <<serverVars, candidateVars, logVars, maxc, leaderCount>>
+    /\ UNCHANGED <<serverVars, candidateVars, logVars, maxc, leaderCount, hovercraftVars>>
 
 \* Leader i advances its commitIndex.
 \* This is done as a separate step from handling AppendEntries responses,
@@ -343,19 +359,19 @@ AdvanceCommitIndex(i) ==
                    IF key \in keysToUpdate
                    THEN [ entryCommitStats[key] EXCEPT !.committed = TRUE ] \* Update record
                    ELSE entryCommitStats[key] ]                             \* Keep old record       
-    /\ UNCHANGED <<messages, serverVars, candidateVars, leaderVars, log, maxc, leaderCount>>
+    /\ UNCHANGED <<messages, serverVars, candidateVars, leaderVars, log, maxc, leaderCount, hovercraftVars>>
 
 \* Network state transitions
 
 \* The network duplicates a message
 DuplicateMessage(m) ==
     /\ Send(m)
-    /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars, instrumentationVars>>
+    /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars, instrumentationVars, hovercraftVars>>
 
 \* The network drops a message
 DropMessage(m) ==
     /\ Discard(m)
-    /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars, instrumentationVars>>
+    /\ UNCHANGED <<serverVars, candidateVars, leaderVars, logVars, instrumentationVars, hovercraftVars>>
 
 =============================================================================
 \* Created by Ovidiu-Cristian Marcu
