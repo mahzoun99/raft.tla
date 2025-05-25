@@ -29,10 +29,8 @@ VARIABLE state
 \* The candidate the server voted for in its current term, or
 \* Nil if it hasn't voted for any.
 VARIABLE votedFor
-\* [P1] an Un-ordered cache for each follower to receive requests from switch!
-VARIABLE UnorderedCache
 
-serverVars == <<currentTerm, state, votedFor, UnorderedCache>>
+serverVars == <<currentTerm, state, votedFor>>
 
 \* A Sequence of log entries. The index into this sequence is the index of the
 \* log entry. Unfortunately, the Sequence module defines Head(s) as the entry

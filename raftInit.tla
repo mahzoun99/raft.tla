@@ -2,13 +2,11 @@
 
 EXTENDS raftHelpers
 
+\* [P1] Initialize Variables!
 InitHistoryVars == voterLog  = [i \in Server |-> [j \in {} |-> <<>>]]
-\* [P1] UnorderedCache Initialized for all servers to empty set.
-\* [P1] !!! State should be fixed for switch!!! + indexVars
 InitServerVars == /\ currentTerm = [i \in Server |-> 1]
                   /\ state       = [i \in Server |-> Follower]
                   /\ votedFor    = [i \in Server |-> Nil]
-                  /\ UnorderedCache = [i \in Server |-> {}]
 InitCandidateVars == /\ votesResponded = [i \in Server |-> {}]
                      /\ votesGranted   = [i \in Server |-> {}]
 \* The values nextIndex[i][i] and matchIndex[i][i] are never read, since the
@@ -33,9 +31,10 @@ Init == /\ messages = [m \in {} |-> 0]
 MyInit ==
     LET ServerIds == CHOOSE ids \in [0..3 -> Server] : TRUE
         r1 == ServerIds[1]
-        r2 == ServerIds[2]
+        r2 == ServerIds[2] \* Leader
         r3 == ServerIds[3]
-        r0 == ServerIds[0]
+        r0 == ServerIds[0] \* Switch
+        HCRServer == Server \ {r0}
     IN
     /\ commitIndex = [s \in Server |-> 0]
     /\ currentTerm = [s \in Server |-> 2]
@@ -51,6 +50,9 @@ MyInit ==
     /\ votesGranted = [s \in Server |-> IF s = r0 THEN Nil ELSE IF s = r2 THEN {r1, r3} ELSE {}]
     /\ votesResponded = [s \in Server |-> IF s = r0 THEN Nil ELSE IF s = r2 THEN {r1, r3} ELSE {}]
     /\ entryCommitStats = [ idx_term \in {} |-> [ sentCount |-> 0, ackCount |-> 0, committed |-> FALSE ] ] \* Initialize here too
+    /\ switchBuffer = [v \in {} |-> 0]
+    /\ unorderedRequests = [s \in HCRServer |-> {}]
+    /\ switchSentRecord = [s \in HCRServer |-> {}]
     /\ switchIndex = "r0"
 
 \* to be used directly in model Init the value

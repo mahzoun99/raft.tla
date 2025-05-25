@@ -18,7 +18,7 @@ Restart(i) ==
     /\ nextIndex'      = [nextIndex EXCEPT ![i] = [j \in Server |-> 1]]
     /\ matchIndex'     = [matchIndex EXCEPT ![i] = [j \in Server |-> 0]]
     /\ commitIndex'    = [commitIndex EXCEPT ![i] = 0]
-    /\ UNCHANGED <<messages, currentTerm, votedFor, UnorderedCache, log, instrumentationVars, hovercraftVars>>
+    /\ UNCHANGED <<messages, currentTerm, votedFor, log, instrumentationVars, hovercraftVars>>
 
 \* Modified to restrict Timeout to just Followers
 \* Server i times out and starts a new election. Follower -> Candidate
@@ -32,7 +32,7 @@ Timeout(i) == /\ state[i] \in {Follower} \*, Candidate
               /\ votesResponded' = [votesResponded EXCEPT ![i] = {}]
               /\ votesGranted'   = [votesGranted EXCEPT ![i] = {}]
               /\ voterLog'       = [voterLog EXCEPT ![i] = [j \in {} |-> <<>>]]
-              /\ UNCHANGED <<messages, leaderVars, logVars, instrumentationVars, UnorderedCache, hovercraftVars>>
+              /\ UNCHANGED <<messages, leaderVars, logVars, instrumentationVars, hovercraftVars>>
 
 \* Modified to restrict Leader transitions, bounded by MaxBecomeLeader
 \* Candidate i transitions to leader. Candidate -> Leader
@@ -46,7 +46,7 @@ BecomeLeader(i) ==
     /\ matchIndex' = [matchIndex EXCEPT ![i] =
                          [j \in Server |-> 0]]
     /\ leaderCount' = [leaderCount EXCEPT ![i] = leaderCount[i] + 1]
-    /\ UNCHANGED <<messages, currentTerm, votedFor, UnorderedCache, candidateVars, logVars, maxc, entryCommitStats, hovercraftVars>>
+    /\ UNCHANGED <<messages, currentTerm, votedFor, candidateVars, logVars, maxc, entryCommitStats, hovercraftVars>>
 
 \* Modified up to MaxTerm; Back To Follower
 \* Any RPC with a newer term causes the recipient to advance its term first.
@@ -59,7 +59,7 @@ UpdateTerm(i, j, m) ==
     /\ state'          = [state       EXCEPT ![i] = Follower]
     /\ votedFor'       = [votedFor    EXCEPT ![i] = Nil]
        \* messages is unchanged so m can be processed further.
-    /\ UNCHANGED <<messages, candidateVars, leaderVars, logVars, instrumentationVars, UnorderedCache, hovercraftVars>>
+    /\ UNCHANGED <<messages, candidateVars, leaderVars, logVars, instrumentationVars, hovercraftVars>>
 
 \***************************** REQUEST VOTE **********************************************
 \* Message handlers
@@ -98,7 +98,7 @@ HandleRequestVoteRequest(i, j, m) ==
                  msource      |-> i,
                  mdest        |-> j],
                  m)
-       /\ UNCHANGED <<state, currentTerm, UnorderedCache, candidateVars, leaderVars, logVars, instrumentationVars, hovercraftVars>>
+       /\ UNCHANGED <<state, currentTerm, candidateVars, leaderVars, logVars, instrumentationVars, hovercraftVars>>
 
 \* Server i receives a RequestVote response from server j with
 \* m.mterm = currentTerm[i].
@@ -140,7 +140,22 @@ SwitchClientRequestReplicate(sIdx, i, v) ==
     /\ UNCHANGED <<vars>>
 
 LeaderIngestHovercRaftRequest(i, v) == 
-    /\ UNCHANGED <<vars>>
+    /\ state[i] = Leader
+    /\ maxc < MaxClientRequests 
+    /\ LET entryTerm == currentTerm[i]
+           entry == [term |-> entryTerm, value |-> v] \* No need to add payload in the leader's log!
+           entryExists == \E j \in DOMAIN log[i] : log[i][j].value = v /\ log[i][j].term = entryTerm
+           newLog == IF entryExists THEN log[i] ELSE Append(log[i], entry)
+           newEntryIndex == Len(log[i]) + 1
+           newEntryKey == <<newEntryIndex, entryTerm>>
+       IN
+        /\ log' = [log EXCEPT ![i] = newLog]
+        /\ maxc' = IF entryExists THEN maxc ELSE maxc + 1
+        /\ entryCommitStats' =
+              IF ~entryExists /\ newEntryIndex > 0 \* Only add stats for truly new entries
+              THEN entryCommitStats @@ (newEntryKey :> [ sentCount |-> 0, ackCount |-> 0, committed |-> FALSE ])
+              ELSE entryCommitStats
+    /\ UNCHANGED <<messages, serverVars, candidateVars, leaderVars, commitIndex, leaderCount, hovercraftVars>>
 
 
 \* Modified. Leader i receives a client request to add v to the log. up to MaxClientRequests.
@@ -175,7 +190,8 @@ AppendEntries(i, j) ==
     /\ LET entryIndex == nextIndex[i][j]
            entry == log[i][entryIndex]
            \* [P1] entryMetaData!
-           entries == << entry >>
+           entryMetadata == << [ term |-> entry.term, value |-> entry.value ] >>
+           entriesMD == << entryMetadata >>
            entryKey == <<entryIndex, entry.term>>
            prevLogIndex == entryIndex - 1
            prevLogTerm == IF prevLogIndex > 0 THEN
@@ -190,7 +206,7 @@ AppendEntries(i, j) ==
                 mterm          |-> currentTerm[i],
                 mprevLogIndex  |-> prevLogIndex,
                 mprevLogTerm   |-> prevLogTerm,
-                mentries       |-> entries,
+                mentries       |-> entriesMD,
                 \* mlog is used as a history variable for the proof.
                 \* It would not exist in a real implementation.
                 mlog           |-> log[i],
@@ -289,10 +305,10 @@ HandleAppendEntriesRequest(i, j, m) ==
                        /\ \lnot rejectMismatchCondition
                        /\ LET \* For unordered requests
                           entryMetadata == m.mentries[1]
-                          fullEntryFromCache == switchBuffer[entryMetadata.value]
+                          fullEntryFromBuffer == switchBuffer[entryMetadata.value]
                           entryForLocalLog == [term |-> entryMetadata.term,
                                                value |-> entryMetadata.value,
-                                               payload |-> fullEntryFromCache.payload]
+                                               payload |-> fullEntryFromBuffer.payload]
                           IN
                             /\ log' = [log EXCEPT ![i] =
                                       Append(log[i], m.mentries[1])]
