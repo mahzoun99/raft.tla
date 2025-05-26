@@ -29,12 +29,14 @@ Init == /\ messages = [m \in {} |-> 0]
 \* MyInit remains unchanged for the core Raft state, entryCommitStats is handled in Init.
 \* [P1] Initialize Switch as a server!
 MyInit ==
-    LET ServerIds == CHOOSE ids \in [0..3 -> Server] : TRUE
+\*    LET ServerIds == CHOOSE ids \in [1..4 -> Server] : TRUE
+        LET ServerIds == CHOOSE ids \in [1..Cardinality(Server) -> Server] :
+          \A id1, id2 \in DOMAIN ids : (id1 /= id2 => ids[id1] /= ids[id2])
         r1 == ServerIds[1]
         r2 == ServerIds[2] \* Leader
         r3 == ServerIds[3]
-        r0 == ServerIds[0] \* Switch
-        HCRServer == Server \ {r0}
+        r4 == ServerIds[4] \* Switch
+        HCRServer == Server \ {r4}
     IN
     /\ commitIndex = [s \in Server |-> 0]
     /\ currentTerm = [s \in Server |-> 2]
@@ -44,16 +46,16 @@ MyInit ==
     /\ maxc = 0
     /\ messages = [m \in {} |-> 0]  \* Start with empty messages
     /\ nextIndex = [s \in Server |-> [t \in Server |-> 1]]
-    /\ state = [s \in Server |-> IF s = r0 THEN Switch ELSE IF s = r2 THEN Leader ELSE Follower]
-    /\ votedFor = [s \in Server |-> IF (s = r2 \/ s = r0) THEN Nil ELSE r2]
-    /\ voterLog = [s \in Server |-> IF s = r0 THEN Nil ELSE IF s = r2 THEN (r1 :> <<>> @@ r3 :> <<>>) ELSE <<>>]
-    /\ votesGranted = [s \in Server |-> IF s = r0 THEN Nil ELSE IF s = r2 THEN {r1, r3} ELSE {}]
-    /\ votesResponded = [s \in Server |-> IF s = r0 THEN Nil ELSE IF s = r2 THEN {r1, r3} ELSE {}]
+    /\ state = [s \in Server |-> IF s = r4 THEN Switch ELSE IF s = r2 THEN Leader ELSE Follower]
+    /\ votedFor = [s \in Server |-> IF (s = r2 \/ s = r4) THEN Nil ELSE r2]
+    /\ voterLog = [s \in Server |-> IF s = r4 THEN Nil ELSE IF s = r2 THEN (r1 :> <<>> @@ r3 :> <<>>) ELSE <<>>]
+    /\ votesGranted = [s \in Server |-> IF s = r4 THEN Nil ELSE IF s = r2 THEN {r1, r3} ELSE {}]
+    /\ votesResponded = [s \in Server |-> IF s = r4 THEN Nil ELSE IF s = r2 THEN {r1, r3} ELSE {}]
     /\ entryCommitStats = [ idx_term \in {} |-> [ sentCount |-> 0, ackCount |-> 0, committed |-> FALSE ] ] \* Initialize here too
     /\ switchBuffer = [v \in {} |-> 0]
     /\ unorderedRequests = [s \in HCRServer |-> {}]
     /\ switchSentRecord = [s \in HCRServer |-> {}]
-    /\ switchIndex = "r0"
+    /\ switchIndex = r4
 
 \* to be used directly in model Init the value
 \*MyInit2 ==

@@ -40,10 +40,13 @@ EntryCommitAckQuorumInv ==
 
 \* fake inv to obtain a trace
 LeaderCommitted ==
-    \E i \in Server : commitIndex[i] /= 1 \*
+    \E i \in Server \ {switchIndex} : commitIndex[i] /= 1 \*
 
 \*Modify LeaderCommited == \E i \in Server : commitIndex[i] /= 1
 \*and run with MySpec OR
+
+AllServersHaveOneUnorderedRequestInv ==
+    \E s \in Server \ {switchIndex} :  Cardinality(unorderedRequests[s]) /= 2
 
 \*Use the following modified Init with MyNext for finding an error trace with LeaderCommited == \E i \in Server : commitIndex[i] /= 2 violated
 (*

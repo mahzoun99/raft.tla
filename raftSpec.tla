@@ -61,8 +61,7 @@ MyNext ==
 
 MySwitchNext == 
     LET Servers == Server \ {switchIndex}
-    IN
-       \/ \E i \in Servers, v \in Value : 
+    IN \/ \E i \in Servers, v \in Value : 
           state[i] = Leader /\ SwitchClientRequest(switchIndex, i, v)
        \/ \E i \in Servers, v \in DOMAIN switchBuffer : 
           SwitchClientRequestReplicate(switchIndex, i, v)
@@ -77,7 +76,7 @@ MySwitchNext ==
 \* to Next.
 Spec == Init /\ [][Next]_vars
 
-MySpec == MyInit /\ [][MyNext]_vars
+MySpec == MyInit /\ [][MySwitchNext]_vars
 
 \* -------------------- Invariants --------------------
 

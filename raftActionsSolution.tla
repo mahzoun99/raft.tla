@@ -126,19 +126,33 @@ DropStaleResponse(i, j, m) ==
 
 \***************************** AppendEntries **********************************************
 
-\* [P1]:
-\* Switch receives a client request and broadcast it to all servers! TODO: update server cache!
-\* Similar to append entries!
-\* HandleAppendEntriesRequest to update cache?!
+\* [P1] Add Client request to Switch buffer!
+SwitchClientRequest(s, i, v) ==
+    LET Servers == Server \ {switchIndex}
+    IN
+        /\ s = switchIndex
+        /\ i \in Servers
+        /\ state[i] = Leader
+        /\ v \notin DOMAIN switchBuffer
+        /\ LET bufferEntry == [value |-> v, payload |-> v]
+           IN switchBuffer' = switchBuffer @@ (v :> bufferEntry)
+        /\ UNCHANGED <<messages, serverVars, candidateVars, leaderVars, logVars, instrumentationVars,
+                       unorderedRequests, switchSentRecord, switchIndex>>
 
-SwitchClientRequest(sIdx, i, v) == 
-    /\ sIdx = switchIndex
-    /\ UNCHANGED <<vars>>
+\* [P1] Replicate the request to all servers (update servers's cache)
+SwitchClientRequestReplicate(s, i, v) ==
+    LET Servers == Server \ {switchIndex}
+    IN
+        /\ s = switchIndex
+        /\ i \in Servers
+        /\ v \in DOMAIN switchBuffer
+        /\ v \notin switchSentRecord[i]
+        /\ unorderedRequests' = [unorderedRequests EXCEPT ![i] = unorderedRequests[i] \cup {v}]
+        /\ switchSentRecord' = [switchSentRecord EXCEPT ![i] = switchSentRecord[i] \cup {v}]
+        /\ UNCHANGED <<messages, serverVars, candidateVars, leaderVars, logVars,
+                       instrumentationVars, switchBuffer, switchIndex>>
 
-SwitchClientRequestReplicate(sIdx, i, v) == 
-    /\ sIdx = switchIndex
-    /\ UNCHANGED <<vars>>
-
+\* [P1] Leader recieves the request! (update the log)
 LeaderIngestHovercRaftRequest(i, v) == 
     /\ state[i] = Leader
     /\ maxc < MaxClientRequests 
