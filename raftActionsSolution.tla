@@ -134,7 +134,8 @@ SwitchClientRequest(s, i, v) ==
         /\ i \in Servers
         /\ state[i] = Leader
         /\ v \notin DOMAIN switchBuffer
-        /\ LET bufferEntry == [value |-> v, payload |-> v]
+        /\ LET entryTerm == currentTerm[i]
+               bufferEntry == [term |-> entryTerm, value |-> v, payload |-> v]
            IN switchBuffer' = switchBuffer @@ (v :> bufferEntry)
         /\ UNCHANGED <<messages, serverVars, candidateVars, leaderVars, logVars, instrumentationVars,
                        unorderedRequests, switchSentRecord, switchIndex>>
@@ -157,7 +158,7 @@ LeaderIngestHovercRaftRequest(i, v) ==
     /\ state[i] = Leader
     /\ maxc < MaxClientRequests 
     /\ LET entryTerm == currentTerm[i]
-           entry == [term |-> entryTerm, value |-> v] \* No need to add payload in the leader's log!
+           entry == [term |-> entryTerm, value |-> v, payload |-> v] \* No need to add payload in the leader's log!
            entryExists == \E j \in DOMAIN log[i] : log[i][j].value = v /\ log[i][j].term = entryTerm
            newLog == IF entryExists THEN log[i] ELSE Append(log[i], entry)
            newEntryIndex == Len(log[i]) + 1
@@ -205,7 +206,7 @@ AppendEntries(i, j) ==
            entry == log[i][entryIndex]
            \* [P1] entryMetaData!
            entryMetadata == << [ term |-> entry.term, value |-> entry.value ] >>
-           entriesMD == << entryMetadata >>
+\*           entries == << entry >>
            entryKey == <<entryIndex, entry.term>>
            prevLogIndex == entryIndex - 1
            prevLogTerm == IF prevLogIndex > 0 THEN
@@ -220,7 +221,7 @@ AppendEntries(i, j) ==
                 mterm          |-> currentTerm[i],
                 mprevLogIndex  |-> prevLogIndex,
                 mprevLogTerm   |-> prevLogTerm,
-                mentries       |-> entriesMD,
+                mentries       |-> entryMetadata,
                 \* mlog is used as a history variable for the proof.
                 \* It would not exist in a real implementation.
                 mlog           |-> log[i],
@@ -330,6 +331,8 @@ HandleAppendEntriesRequest(i, j, m) ==
                        /\ UNCHANGED <<serverVars, commitIndex, messages>>
        /\ UNCHANGED <<candidateVars, leaderVars, instrumentationVars, \* entryCommitStats unchanged on followers
                     switchBuffer, switchIndex, switchSentRecord>> 
+
+
 
 \* Server i receives an AppendEntries response from server j with
 \* m.mterm = currentTerm[i].
