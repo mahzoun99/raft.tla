@@ -158,7 +158,7 @@ LeaderIngestHovercRaftRequest(i, v) ==
     /\ state[i] = Leader
     /\ maxc < MaxClientRequests 
     /\ LET entryTerm == currentTerm[i]
-           entry == [term |-> entryTerm, value |-> v, payload |-> v] \* No need to add payload in the leader's log!
+           entry == [term |-> entryTerm, value |-> v] \* No need to add payload in the leader's log!
            entryExists == \E j \in DOMAIN log[i] : log[i][j].value = v /\ log[i][j].term = entryTerm
            newLog == IF entryExists THEN log[i] ELSE Append(log[i], entry)
            newEntryIndex == Len(log[i]) + 1
